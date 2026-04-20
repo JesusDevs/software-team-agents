@@ -1,0 +1,11 @@
+.env
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+rag/.chroma/
+rag/.index_hashes.json
+artifacts/
+*.egg-info/
+.DS_Store

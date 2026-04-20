@@ -1,0 +1,107 @@
+# ============================================================
+# MODELS CONFIGURATION — software-team-agents
+# ============================================================
+# Edit this file to change models, providers, or temperatures.
+# No code changes needed — the system reads this on every run.
+#
+# PROVIDER PRIORITY (auto-detected from .env keys):
+#   1. openai      — best quality, requires OPENAI_API_KEY
+#   2. openrouter  — free tier available, requires OPENROUTER_API_KEY
+#
+# HOW TO SWITCH PROVIDER:
+#   Set the key in .env and the system picks it automatically.
+#   If both keys are present, OpenAI takes priority.
+# ============================================================
+
+providers:
+  openai:
+    base_url: https://api.openai.com/v1
+    env_key: OPENAI_API_KEY
+
+  openrouter:
+    base_url: https://openrouter.ai/api/v1
+    env_key: OPENROUTER_API_KEY
+    headers:
+      HTTP-Referer: https://github.com/software-team-agents
+      X-Title: Software Team Agents
+
+# ── LLM models per provider ──────────────────────────────────────────────────
+# Each provider lists: strong (complex reasoning) and fast (simple/routing)
+llm_models:
+  openai:
+    strong: gpt-4o             # PO, UX, Architect, Dev
+    fast:   gpt-4o-mini        # Supervisor, DevOps
+
+  openrouter:
+    strong: meta-llama/llama-3.3-70b-instruct:free   # PO, UX, Architect, Dev
+    fast:   meta-llama/llama-3.2-3b-instruct:free    # Supervisor, DevOps
+    # Alternatives (uncomment to switch):
+    # strong: deepseek/deepseek-r1:free
+    # strong: google/gemma-3-27b-it:free
+    # strong: mistralai/mistral-7b-instruct:free
+
+# ── Embeddings ───────────────────────────────────────────────────────────────
+# Priority: openai → local (sentence-transformers, no key needed)
+embeddings:
+  openai:
+    model: text-embedding-3-small   # 1536 dims, best quality
+    # alternatives: text-embedding-3-large (3072 dims), text-embedding-ada-002
+
+  local:
+    model: sentence-transformers/all-MiniLM-L6-v2   # 384 dims, free, runs on CPU
+    device: cpu
+    # alternatives (better quality, heavier):
+    # model: sentence-transformers/all-mpnet-base-v2    # 768 dims
+    # model: BAAI/bge-small-en-v1.5                     # 384 dims, faster
+
+# ── Per-agent configuration ──────────────────────────────────────────────────
+# tier: strong | fast  (maps to llm_models above per active provider)
+# temperature: 0.0-1.0 (lower = more deterministic)
+# max_tokens: max output tokens per LLM call
+agents:
+  supervisor:
+    tier: fast
+    temperature: 0.1
+    max_tokens: 1000
+    role_description: Orchestrates the team, decides routing and task instructions
+
+  po:
+    tier: strong
+    temperature: 0.4
+    max_tokens: 4000
+    role_description: Product Owner — generates PRD, user stories, acceptance criteria
+
+  ux:
+    tier: strong
+    temperature: 0.4
+    max_tokens: 4000
+    role_description: UX Designer — user flows, wireframes, design tokens
+
+  architect:
+    tier: strong
+    temperature: 0.2
+    max_tokens: 5000
+    role_description: Software Architect — system design, ADRs, API contracts
+
+  dev:
+    tier: strong
+    temperature: 0.2
+    max_tokens: 5000
+    role_description: Developer — implementation specs, folder structure, test plan
+
+  devops:
+    tier: fast
+    temperature: 0.1
+    max_tokens: 4000
+    role_description: DevOps Engineer — CI/CD pipeline, Docker, IaC, monitoring
+
+# ── RAG configuration ────────────────────────────────────────────────────────
+rag:
+  chunk_size: 800
+  chunk_overlap: 100
+  top_k: 4                    # number of chunks retrieved per query
+  separators:                 # split markdown by headers first
+    - "\n## "
+    - "\n### "
+    - "\n\n"
+    - "\n"

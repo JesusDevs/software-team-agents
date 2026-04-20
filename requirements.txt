@@ -12,3 +12,5 @@ pydantic-settings>=2.0.0
 python-dotenv>=1.0.0
 duckduckgo-search>=6.0.0
 tiktoken>=0.7.0
+sentence-transformers>=3.0.0
+langchain-huggingface>=0.1.0

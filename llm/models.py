@@ -1,42 +1,65 @@
+"""
+LLM + Embeddings factory.
+
+All model configuration lives in config/models.yaml.
+Provider is auto-detected from .env (OpenAI > OpenRouter > none).
+No code changes needed to switch models — edit models.yaml only.
+"""
 import yaml
 from pathlib import Path
 from functools import lru_cache
 from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from config.settings import settings, OPENROUTER_BASE_URL
+from config.settings import settings
 
-_CONFIG_PATH = Path(__file__).parent.parent / "config" / "agents.yaml"
-
-# Free models available on OpenRouter (no billing required)
-OPENROUTER_FREE_MODELS = {
-    "strong":  "meta-llama/llama-3.3-70b-instruct:free",   # PO, UX, Architect, Dev
-    "fast":    "meta-llama/llama-3.2-3b-instruct:free",    # Supervisor, DevOps
-    "reason":  "deepseek/deepseek-r1:free",                 # optional reasoning
-}
+_MODELS_PATH = Path(__file__).parent.parent / "config" / "models.yaml"
 
 
-def _load_agent_config() -> dict:
-    with open(_CONFIG_PATH) as f:
+@lru_cache(maxsize=1)
+def _cfg() -> dict:
+    with open(_MODELS_PATH) as f:
         return yaml.safe_load(f)
 
 
-def _make_llm(model: str, temperature: float, max_tokens: int) -> ChatOpenAI:
-    provider = settings.active_provider()
+def _provider() -> str:
+    if settings.has_openai_key():
+        return "openai"
+    if settings.has_openrouter_key():
+        return "openrouter"
+    return "none"
+
+
+def _model_for_tier(tier: str) -> str:
+    provider = _provider()
+    if provider == "none":
+        return "none"
+    return _cfg()["llm_models"][provider][tier]
+
+
+@lru_cache(maxsize=None)
+def get_model_for_agent(role: str) -> ChatOpenAI:
+    """Return a ChatOpenAI instance configured for the given agent role.
+    Reads tier, temperature, and max_tokens from config/models.yaml.
+    Provider is auto-selected from .env keys.
+    """
+    agent_cfg = _cfg()["agents"].get(role, {})
+    tier        = agent_cfg.get("tier", "fast")
+    temperature = agent_cfg.get("temperature", 0.3)
+    max_tokens  = agent_cfg.get("max_tokens", 2000)
+    model       = _model_for_tier(tier)
+    provider    = _provider()
 
     if provider == "openrouter":
+        provider_cfg = _cfg()["providers"]["openrouter"]
         return ChatOpenAI(
             model=model,
             temperature=temperature,
             max_tokens=max_tokens,
             api_key=settings.openrouter_api_key,
-            base_url=OPENROUTER_BASE_URL,
+            base_url=provider_cfg["base_url"],
             streaming=True,
-            default_headers={
-                "HTTP-Referer": "https://github.com/software-team-agents",
-                "X-Title": "Software Team Agents",
-            },
+            default_headers=provider_cfg.get("headers", {}),
         )
 
-    # default: OpenAI
     return ChatOpenAI(
         model=model,
         temperature=temperature,
@@ -46,49 +69,46 @@ def _make_llm(model: str, temperature: float, max_tokens: int) -> ChatOpenAI:
     )
 
 
-@lru_cache(maxsize=None)
-def get_model_for_agent(role: str) -> ChatOpenAI:
-    cfg = _load_agent_config().get(role, {})
-    provider = settings.active_provider()
-
-    if provider == "openrouter":
-        # Use free OpenRouter models — strong for complex agents, fast for simple ones
-        fast_roles = {"supervisor", "devops"}
-        model = OPENROUTER_FREE_MODELS["fast"] if role in fast_roles else OPENROUTER_FREE_MODELS["strong"]
-    else:
-        model = cfg.get("model", "gpt-4o-mini")
-
-    return _make_llm(
-        model=model,
-        temperature=cfg.get("temperature", 0.3),
-        max_tokens=cfg.get("max_tokens", 2000),
-    )
-
-
 @lru_cache(maxsize=1)
-def get_embeddings() -> OpenAIEmbeddings:
-    """Embeddings always use OpenAI (OpenRouter doesn't provide embeddings API).
-    Falls back gracefully if key is missing — RAG will be disabled.
+def get_embeddings():
+    """Return the best available embeddings provider.
+    Priority: OpenAI (best quality) → local sentence-transformers (free, no key).
+    Config lives in config/models.yaml under embeddings.
     """
-    cfg = _load_agent_config().get("embeddings", {})
-    api_key = settings.openai_api_key if settings.has_openai_key() else "sk-placeholder"
-    return OpenAIEmbeddings(
-        model=cfg.get("model", "text-embedding-3-small"),
-        api_key=api_key,
-    )
+    emb_cfg = _cfg().get("embeddings", {})
+
+    if settings.has_openai_key():
+        model = emb_cfg.get("openai", {}).get("model", "text-embedding-3-small")
+        return OpenAIEmbeddings(model=model, api_key=settings.openai_api_key)
+
+    try:
+        from langchain_huggingface import HuggingFaceEmbeddings
+        local_cfg = emb_cfg.get("local", {})
+        return HuggingFaceEmbeddings(
+            model_name=local_cfg.get("model", "sentence-transformers/all-MiniLM-L6-v2"),
+            model_kwargs={"device": local_cfg.get("device", "cpu")},
+            encode_kwargs={"normalize_embeddings": True},
+        )
+    except ImportError:
+        return OpenAIEmbeddings(model="text-embedding-3-small", api_key="sk-placeholder")
 
 
 def provider_status() -> dict:
-    """Returns a summary of which providers are active."""
-    provider = settings.active_provider()
+    """Quick summary of active providers. Used by the dashboard banner."""
+    provider = _provider()
+    cfg = _cfg()
+    has_local_emb = True  # sentence-transformers always available as fallback
+    emb_label = (
+        f"OpenAI ({cfg['embeddings']['openai']['model']})"
+        if settings.has_openai_key()
+        else f"local ({cfg['embeddings']['local']['model'].split('/')[-1]})"
+    )
     return {
-        "active_provider": provider,
-        "openai_available": settings.has_openai_key(),
+        "active_provider":     provider,
+        "openai_available":    settings.has_openai_key(),
         "openrouter_available": settings.has_openrouter_key(),
-        "rag_available": settings.has_openai_key(),  # embeddings need OpenAI
-        "llm_model": (
-            OPENROUTER_FREE_MODELS["strong"] if provider == "openrouter"
-            else "gpt-4o" if provider == "openai"
-            else "none"
-        ),
+        "rag_available":       True,
+        "embeddings_provider": emb_label,
+        "llm_strong_model":    _model_for_tier("strong"),
+        "llm_fast_model":      _model_for_tier("fast"),
     }

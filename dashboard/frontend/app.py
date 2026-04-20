@@ -96,10 +96,11 @@ OPENROUTER_API_KEY=sk-or-...
     st.stop()
 
 # Provider status banner
+emb = status.get("embeddings_provider", "unknown")
 if provider == "openrouter":
-    st.info(f"**Provider: OpenRouter** — model: `{status['llm_model']}`  |  RAG embeddings: {'✅ OpenAI' if status['rag_available'] else '⚠️ disabled (no OpenAI key)'}")
+    st.info(f"**LLM: OpenRouter** `{status['llm_model']}`  ·  **Embeddings:** {emb}")
 elif provider == "openai":
-    st.success(f"**Provider: OpenAI** — model: `gpt-4o`  |  RAG embeddings: ✅")
+    st.success(f"**LLM: OpenAI** `gpt-4o`  ·  **Embeddings:** {emb}")
 
 # ── pipeline status bar ───────────────────────────────────────────────────────
 PHASES = ["po", "ux", "architect", "dev", "devops"]

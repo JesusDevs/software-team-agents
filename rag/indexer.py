@@ -48,10 +48,14 @@ def index_agent_knowledge(agent_role: str, force: bool = False) -> int:
     role_hashes = hashes.get(agent_role, {})
     vectorstore = get_agent_vectorstore(agent_role)
 
+    import yaml
+    rag_cfg = yaml.safe_load(
+        (ROOT_DIR / "config" / "models.yaml").read_text()
+    ).get("rag", {})
     splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=100,
-        separators=["\n## ", "\n### ", "\n\n", "\n", " "],
+        chunk_size=rag_cfg.get("chunk_size", 800),
+        chunk_overlap=rag_cfg.get("chunk_overlap", 100),
+        separators=rag_cfg.get("separators", ["\n## ", "\n### ", "\n\n", "\n", " "]),
     )
 
     indexed = 0

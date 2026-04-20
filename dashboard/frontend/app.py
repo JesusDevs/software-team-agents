@@ -75,10 +75,31 @@ st.title("🤖 Software Team Agents")
 st.caption("Multi-agent pipeline: PO → UX → Architect → Dev → DevOps")
 
 from config.settings import settings
-if not settings.has_openai_key():
-    st.error("**OPENAI_API_KEY not set.** Create a `.env` file with your key to run the pipeline.")
-    st.code("cp .env.example .env\n# Then edit .env and add your keys", language="bash")
+from llm.models import provider_status
+
+status = provider_status()
+provider = status["active_provider"]
+
+if provider == "none":
+    st.error("**No LLM key configured.** Set `OPENAI_API_KEY` or `OPENROUTER_API_KEY` in `.env`")
+    st.code("cp .env.example .env\n# Then add your key and restart", language="bash")
+    with st.expander("Get a free key via OpenRouter"):
+        st.markdown("""
+1. Go to [openrouter.ai](https://openrouter.ai) → Sign up (free)
+2. Go to **Keys** → Create a new key
+3. Add to `.env`:
+```
+OPENROUTER_API_KEY=sk-or-...
+```
+4. Free models included: **Llama 3.3 70B**, **DeepSeek R1**, **Gemma 3**
+        """)
     st.stop()
+
+# Provider status banner
+if provider == "openrouter":
+    st.info(f"**Provider: OpenRouter** — model: `{status['llm_model']}`  |  RAG embeddings: {'✅ OpenAI' if status['rag_available'] else '⚠️ disabled (no OpenAI key)'}")
+elif provider == "openai":
+    st.success(f"**Provider: OpenAI** — model: `gpt-4o`  |  RAG embeddings: ✅")
 
 # ── pipeline status bar ───────────────────────────────────────────────────────
 PHASES = ["po", "ux", "architect", "dev", "devops"]

@@ -5,58 +5,70 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-st.set_page_config(page_title="Conversations", page_icon="👁", layout="wide")
-st.title("👁 Agent Conversations")
-st.caption("Full message history including tool calls and handoffs.")
+st.set_page_config(page_title="Conversaciones", page_icon="👁", layout="wide")
+st.title("👁 Conversaciones de Agentes")
+st.caption("Historial completo de mensajes incluyendo herramientas y traspasos.")
 
 state = st.session_state.get("graph_state")
 if not state:
-    st.info("No conversation yet. Start the pipeline from the **Pipeline** page.")
+    st.info("Sin conversación aún. Inicia el pipeline desde la página **Pipeline**.")
     st.stop()
 
 messages = state.get("messages", [])
 handoff_log = state.get("handoff_log", [])
 
-# ── filters ───────────────────────────────────────────────────────────────────
 col1, col2 = st.columns(2)
-show_tool_calls = col1.checkbox("Show tool calls", value=True)
-show_tool_results = col2.checkbox("Show tool results", value=False)
+show_tool_calls = col1.checkbox("Mostrar llamadas a herramientas", value=True)
+show_tool_results = col2.checkbox("Mostrar resultados de herramientas", value=False)
 
 AGENT_ICONS = {
-    "supervisor": "🎯", "po_agent": "📋", "ux_agent": "🎨",
-    "architect_agent": "🏗️", "dev_agent": "💻", "devops_agent": "🔧",
+    "supervisor":      "🎯",
+    "po_agent":        "📋",
+    "ux_agent":        "🎨",
+    "architect_agent": "🏗️",
+    "dev_agent":       "💻",
+    "devops_agent":    "🔧",
 }
-AGENT_COLORS = {
-    "supervisor": "#2563EB", "po_agent": "#7C3AED", "ux_agent": "#DB2777",
-    "architect_agent": "#D97706", "dev_agent": "#16A34A", "devops_agent": "#DC2626",
+AGENT_NAMES = {
+    "supervisor":      "Supervisor",
+    "po_agent":        "Product Owner",
+    "ux_agent":        "Diseñador UX",
+    "architect_agent": "Arquitecto",
+    "dev_agent":       "Desarrollador",
+    "devops_agent":    "DevOps",
 }
 
 st.divider()
-st.subheader("Handoff Timeline")
+st.subheader("Línea de tiempo de traspasos")
 
-for event in handoff_log:
-    ts = event.get("timestamp", "")[:19].replace("T", " ")
-    frm = event.get("from_agent", "?")
-    to = event.get("to_agent", "?")
-    msg = event.get("message", "")
-    icon_from = AGENT_ICONS.get(frm, "❓")
-    icon_to = AGENT_ICONS.get(to, "❓")
-    st.markdown(
-        f"`{ts}` &nbsp; {icon_from} **{frm}** → {icon_to} **{to}** &nbsp;— {msg}"
-    )
+if not handoff_log:
+    st.info("Sin traspasos registrados aún.")
+else:
+    for event in handoff_log:
+        ts = event.get("timestamp", "")[:19].replace("T", " ")
+        frm = event.get("from_agent", "?")
+        to  = event.get("to_agent", "?")
+        msg = event.get("message", "")
+        icon_from = AGENT_ICONS.get(frm, "❓")
+        icon_to   = AGENT_ICONS.get(to, "❓")
+        name_from = AGENT_NAMES.get(frm, frm)
+        name_to   = AGENT_NAMES.get(to, to)
+        st.markdown(
+            f"`{ts}` &nbsp; {icon_from} **{name_from}** → {icon_to} **{name_to}** &nbsp;— {msg}"
+        )
 
 st.divider()
-st.subheader("Full Message Log")
+st.subheader("Registro completo de mensajes")
 
-for i, msg in enumerate(messages):
+for msg in messages:
     if isinstance(msg, HumanMessage):
         with st.container(border=True):
-            st.markdown(f"👤 **Human**: {msg.content}")
+            st.markdown(f"👤 **Usuario**: {msg.content}")
 
     elif isinstance(msg, AIMessage):
-        name = getattr(msg, "name", "") or "agent"
-        icon = AGENT_ICONS.get(name, "🤖")
-        label = name.replace("_", " ").title()
+        name  = getattr(msg, "name", "") or "agent"
+        icon  = AGENT_ICONS.get(name, "🤖")
+        label = AGENT_NAMES.get(name, name.replace("_", " ").title())
         with st.container(border=True):
             st.markdown(f"{icon} **{label}**")
             if msg.content:
@@ -68,5 +80,5 @@ for i, msg in enumerate(messages):
 
     elif isinstance(msg, ToolMessage) and show_tool_results:
         with st.container(border=True):
-            st.markdown(f"⚙️ **Tool result** `{msg.name}`")
+            st.markdown(f"⚙️ **Resultado de herramienta** `{msg.name}`")
             st.code(str(msg.content)[:500])

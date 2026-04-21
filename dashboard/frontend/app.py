@@ -7,13 +7,13 @@ import streamlit as st
 from langchain_core.messages import HumanMessage
 
 st.set_page_config(
-    page_title="Software Team Agents",
+    page_title="Equipo de Software IA",
     page_icon="🤖",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# ── session registry (disk) ───────────────────────────────────────────────────
+# ── registro de sesiones en disco ─────────────────────────────────────────────
 _REGISTRY = Path(__file__).parent.parent.parent / "data" / "sessions.json"
 
 def _load_registry() -> dict:
@@ -40,7 +40,20 @@ def _delete_session(thread_id: str) -> None:
     registry.pop(thread_id, None)
     _REGISTRY.write_text(json.dumps(registry, indent=2, ensure_ascii=False))
 
-# ── session state bootstrap ───────────────────────────────────────────────────
+# ── detección de interrupts (LangGraph 1.1.x) ─────────────────────────────────
+def _get_pending_interrupt(pipeline, config):
+    """Detecta si el grafo está pausado en un nodo interrupt."""
+    try:
+        snapshot = pipeline.get_state(config)
+        if snapshot and snapshot.tasks:
+            for task in snapshot.tasks:
+                if hasattr(task, "interrupts") and task.interrupts:
+                    return task.interrupts[0]
+    except Exception:
+        pass
+    return None
+
+# ── inicialización de session state ──────────────────────────────────────────
 def _init_session():
     if "pipeline" not in st.session_state:
         from graph.pipeline import get_pipeline
@@ -68,7 +81,7 @@ def _init_session():
 
 _init_session()
 
-# ── helper: restore graph_state + pending_interrupt from checkpoint ───────────
+# ── restaurar sesión desde checkpoint ────────────────────────────────────────
 def _restore_from_checkpoint(thread_id: str) -> None:
     config = {"configurable": {"thread_id": thread_id}}
     try:
@@ -76,36 +89,32 @@ def _restore_from_checkpoint(thread_id: str) -> None:
         if snapshot and snapshot.values:
             st.session_state.graph_state = snapshot.values
             st.session_state.started = True
-            # Detect pending interrupt
-            if snapshot.tasks:
-                for task in snapshot.tasks:
-                    if hasattr(task, "interrupts") and task.interrupts:
-                        st.session_state.pending_interrupt = task.interrupts[0]
-                        break
+            interrupt = _get_pending_interrupt(st.session_state.pipeline, config)
+            st.session_state.pending_interrupt = interrupt
     except Exception as e:
-        st.warning(f"Could not restore state: {e}")
+        st.warning(f"No se pudo restaurar el estado: {e}")
 
 # ── sidebar ───────────────────────────────────────────────────────────────────
 with st.sidebar:
-    st.title("🤖 Software Team")
-    st.caption(f"Thread: `{st.session_state.thread_id[:8]}…`")
+    st.title("🤖 Equipo de Software")
+    st.caption(f"Sesión: `{st.session_state.thread_id[:8]}…`")
     st.caption(f"Run: `{st.session_state.run_id}`")
 
     st.divider()
-    st.markdown("**Navigation**")
-    st.page_link("app.py",                    label="🏠 Pipeline",       icon="🏠")
-    st.page_link("pages/1_chat.py",            label="💬 Chat",            icon="💬")
-    st.page_link("pages/2_artifacts.py",       label="📄 Artifacts",       icon="📄")
-    st.page_link("pages/3_conversations.py",   label="👁 Conversations",    icon="👁")
-    st.page_link("pages/4_tokens.py",          label="📊 Tokens",          icon="📊")
-    st.page_link("pages/5_knowledge.py",       label="📚 Knowledge Base",   icon="📚")
+    st.markdown("**Navegación**")
+    st.page_link("app.py",                    label="🏠 Pipeline")
+    st.page_link("pages/1_chat.py",            label="💬 Chat")
+    st.page_link("pages/2_artifacts.py",       label="📄 Artefactos")
+    st.page_link("pages/3_conversations.py",   label="👁 Conversaciones")
+    st.page_link("pages/4_tokens.py",          label="📊 Tokens")
+    st.page_link("pages/5_knowledge.py",       label="📚 Base de Conocimiento")
 
     st.divider()
 
-    # ── saved sessions ────────────────────────────────────────────────────────
+    # ── sesiones guardadas ────────────────────────────────────────────────────
     registry = _load_registry()
     if registry:
-        st.markdown("**💾 Saved sessions**")
+        st.markdown("**💾 Sesiones guardadas**")
         for tid, meta in sorted(registry.items(), key=lambda x: x[1].get("updated",""), reverse=True):
             label = f"{meta['run_id']} · {meta['phase']} · {meta['updated'][5:16]}"
             col_r, col_x = st.columns([5, 1])
@@ -122,7 +131,7 @@ with st.sidebar:
                 st.rerun()
         st.divider()
 
-    if st.button("🆕 New Run", use_container_width=True):
+    if st.button("🆕 Nuevo Run", use_container_width=True):
         from graph.pipeline import reset_pipeline
         reset_pipeline()
         for key in ["pipeline", "thread_id", "run_id", "graph_state",
@@ -130,9 +139,9 @@ with st.sidebar:
             st.session_state.pop(key, None)
         st.rerun()
 
-# ── main ──────────────────────────────────────────────────────────────────────
-st.title("🤖 Software Team Agents")
-st.caption("Multi-agent pipeline: PO → UX → Architect → Dev → DevOps")
+# ── encabezado ────────────────────────────────────────────────────────────────
+st.title("🤖 Equipo de Software IA")
+st.caption("Pipeline multi-agente: PO → UX → Arquitecto → Dev → DevOps")
 
 from llm.models import provider_status
 
@@ -140,11 +149,10 @@ status = provider_status()
 provider = status["active_provider"]
 
 if provider == "none":
-    st.error("**No LLM key configured.** Set a key in `.env` and restart.")
+    st.error("**No hay clave LLM configurada.** Agrega una en `.env` y reinicia.")
     st.stop()
 
-# Provider status banner
-emb = status.get("embeddings_provider", "unknown")
+emb = status.get("embeddings_provider", "desconocido")
 strong = status.get("llm_strong_model", "")
 banner_map = {
     "gemini":     ("🟢", "Gemini"),
@@ -155,9 +163,9 @@ banner_map = {
 icon, label = banner_map.get(provider, ("⚪", provider.title()))
 st.info(f"{icon} **LLM: {label}** `{strong}`  ·  **Embeddings:** {emb}")
 
-# ── pipeline status bar ───────────────────────────────────────────────────────
+# ── barra de progreso del pipeline ────────────────────────────────────────────
 PHASES = ["po", "ux", "architect", "dev", "devops"]
-PHASE_LABELS = {"po": "PO", "ux": "UX", "architect": "Architect",
+PHASE_LABELS = {"po": "PO", "ux": "UX", "architect": "Arquitecto",
                 "dev": "Dev", "devops": "DevOps"}
 
 state = st.session_state.graph_state
@@ -177,19 +185,19 @@ for i, (phase, col) in enumerate(zip(PHASES, cols)):
 
 st.divider()
 
-# ── start form ────────────────────────────────────────────────────────────────
+# ── formulario de inicio ──────────────────────────────────────────────────────
 if not st.session_state.started:
-    st.subheader("Start a new project")
+    st.subheader("Iniciar un nuevo proyecto")
     brief = st.text_area(
-        "Project brief",
-        placeholder="e.g., Build a personal finance app for millennials with expense tracking, budget goals, and investment overview.",
+        "Brief del proyecto",
+        placeholder="Ej: Crear una app de finanzas personales para millennials con seguimiento de gastos, metas de ahorro y vista de inversiones.",
         height=120,
     )
-    run_id = st.text_input("Run ID (folder name for artifacts)", value="run_001")
+    run_id = st.text_input("ID del run (nombre de carpeta para los artefactos)", value="run_001")
 
-    if st.button("🚀 Start Pipeline", type="primary", use_container_width=True):
+    if st.button("🚀 Iniciar Pipeline", type="primary", use_container_width=True):
         if not brief.strip():
-            st.warning("Please enter a project brief.")
+            st.warning("Por favor ingresa un brief del proyecto.")
         else:
             st.session_state.run_id = run_id or "run_001"
             st.session_state.started = True
@@ -209,13 +217,13 @@ if not st.session_state.started:
             }
 
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
-            with st.spinner("Running PO agent…"):
+            with st.spinner("Ejecutando agente PO…"):
                 try:
                     result = st.session_state.pipeline.invoke(initial_state, config=config)
                     st.session_state.graph_state = result
-                    interrupts = result.get("__interrupt__", [])
-                    if interrupts:
-                        st.session_state.pending_interrupt = interrupts[0]
+                    st.session_state.pending_interrupt = _get_pending_interrupt(
+                        st.session_state.pipeline, config
+                    )
                     _save_session(
                         st.session_state.thread_id,
                         st.session_state.run_id,
@@ -223,10 +231,10 @@ if not st.session_state.started:
                         result.get("current_phase", "po"),
                     )
                 except Exception as e:
-                    st.error(f"Pipeline error: {e}")
+                    st.error(f"Error en el pipeline: {e}")
             st.rerun()
 else:
-    # ── pending HITL ──────────────────────────────────────────────────────────
+    # ── panel HITL ────────────────────────────────────────────────────────────
     if st.session_state.pending_interrupt:
         iv = st.session_state.pending_interrupt
         if isinstance(iv, dict):
@@ -238,26 +246,30 @@ else:
         art_name = payload.get("artifact_name", "")
         content  = payload.get("content", "")
 
-        st.subheader(f"⏸ HITL — Review `{art_name}`")
-        with st.expander("📄 View full artifact", expanded=True):
+        st.subheader(f"⏸ Revisión humana — `{art_name}`")
+        with st.expander("📄 Ver artefacto completo", expanded=True):
             st.markdown(content)
 
-        feedback_input = st.text_area("Feedback (optional):", key="hitl_feedback_input")
+        feedback_input = st.text_area(
+            "Feedback (opcional — déjalo vacío para aprobar tal cual):",
+            key="hitl_feedback_input"
+        )
 
         col1, col2 = st.columns(2)
         config = {"configurable": {"thread_id": st.session_state.thread_id}}
 
-        if col1.button("✅ Approve", type="primary", use_container_width=True):
+        if col1.button("✅ Aprobar", type="primary", use_container_width=True):
             from langgraph.types import Command
             st.session_state.pending_interrupt = None
-            with st.spinner("Resuming pipeline…"):
+            with st.spinner("Reanudando pipeline…"):
                 try:
                     result = st.session_state.pipeline.invoke(
                         Command(resume={"approved": True}), config=config
                     )
                     st.session_state.graph_state = result
-                    interrupts = result.get("__interrupt__", [])
-                    st.session_state.pending_interrupt = interrupts[0] if interrupts else None
+                    st.session_state.pending_interrupt = _get_pending_interrupt(
+                        st.session_state.pipeline, config
+                    )
                     _save_session(
                         st.session_state.thread_id,
                         st.session_state.run_id,
@@ -268,18 +280,19 @@ else:
                     st.error(f"Error: {e}")
             st.rerun()
 
-        if col2.button("❌ Reject & revise", use_container_width=True):
+        if col2.button("❌ Rechazar y revisar", use_container_width=True):
             from langgraph.types import Command
             feedback = st.session_state.get("hitl_feedback_input", "")
             st.session_state.pending_interrupt = None
-            with st.spinner("Sending feedback…"):
+            with st.spinner("Enviando feedback…"):
                 try:
                     result = st.session_state.pipeline.invoke(
                         Command(resume={"approved": False, "feedback": feedback}), config=config
                     )
                     st.session_state.graph_state = result
-                    interrupts = result.get("__interrupt__", [])
-                    st.session_state.pending_interrupt = interrupts[0] if interrupts else None
+                    st.session_state.pending_interrupt = _get_pending_interrupt(
+                        st.session_state.pipeline, config
+                    )
                     _save_session(
                         st.session_state.thread_id,
                         st.session_state.run_id,
@@ -291,7 +304,7 @@ else:
             st.rerun()
 
     elif state and state.get("current_phase") == "done":
-        st.success("🎉 Pipeline complete! All 5 deliverables approved.")
+        st.success("🎉 ¡Pipeline completo! Los 5 entregables fueron aprobados.")
         st.balloons()
     else:
-        st.info("Pipeline running or waiting. Check the **Chat** page to interact with the Supervisor.")
+        st.info("Pipeline en ejecución. Verifica la página de **Chat** para interactuar con el Supervisor.")

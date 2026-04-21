@@ -5,34 +5,43 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 import streamlit as st
 from langchain_core.messages import HumanMessage, AIMessage, ToolMessage
 
-st.set_page_config(page_title="Chat — Software Team", page_icon="💬", layout="wide")
-st.title("💬 Chat with Supervisor")
-st.caption("Send a message to the Supervisor. It will route to the right agent.")
+st.set_page_config(page_title="Chat — Equipo IA", page_icon="💬", layout="wide")
+st.title("💬 Chat con el Supervisor")
+st.caption("Envía un mensaje al Supervisor. Él lo redirige al agente correcto.")
 
 if "pipeline" not in st.session_state:
-    st.warning("Go to the **Pipeline** page first to start a run.")
+    st.warning("Ve a la página **Pipeline** primero para iniciar un run.")
     st.stop()
 
 if not st.session_state.get("started"):
-    st.info("Start the pipeline from the **Pipeline** page first.")
+    st.info("Inicia el pipeline desde la página **Pipeline** primero.")
     st.stop()
 
-from config.settings import settings
-if not settings.has_openai_key():
-    st.error("OPENAI_API_KEY not set.")
+from llm.models import provider_status
+status = provider_status()
+if status["active_provider"] == "none":
+    st.error("No hay proveedor LLM configurado. Agrega una clave API en `.env`.")
     st.stop()
 
-# ── conversation display ──────────────────────────────────────────────────────
+# ── historial de conversación ─────────────────────────────────────────────────
 state = st.session_state.get("graph_state")
 messages = state.get("messages", []) if state else []
 
-AGENT_COLORS = {
-    "supervisor": "🎯",
-    "po_agent":   "📋",
-    "ux_agent":   "🎨",
+AGENT_ICONS = {
+    "supervisor":      "🎯",
+    "po_agent":        "📋",
+    "ux_agent":        "🎨",
     "architect_agent": "🏗️",
-    "dev_agent":  "💻",
-    "devops_agent": "🔧",
+    "dev_agent":       "💻",
+    "devops_agent":    "🔧",
+}
+AGENT_NAMES = {
+    "supervisor":      "Supervisor",
+    "po_agent":        "Product Owner",
+    "ux_agent":        "Diseñador UX",
+    "architect_agent": "Arquitecto",
+    "dev_agent":       "Desarrollador",
+    "devops_agent":    "DevOps",
 }
 
 for msg in messages:
@@ -41,45 +50,58 @@ for msg in messages:
             st.markdown(msg.content)
     elif isinstance(msg, AIMessage):
         name = getattr(msg, "name", "") or "agent"
-        icon = AGENT_COLORS.get(name, "🤖")
+        icon = AGENT_ICONS.get(name, "🤖")
+        label = AGENT_NAMES.get(name, name.replace("_agent", "").upper())
         with st.chat_message("assistant", avatar=icon):
-            label = name.replace("_agent", "").upper()
             st.caption(f"**{label}**")
             if msg.content:
                 st.markdown(msg.content)
             if msg.tool_calls:
                 for tc in msg.tool_calls:
-                    with st.expander(f"🔧 Tool call: `{tc['name']}`", expanded=False):
+                    with st.expander(f"🔧 Herramienta: `{tc['name']}`", expanded=False):
                         st.json(tc.get("args", {}))
     elif isinstance(msg, ToolMessage):
-        with st.expander(f"⚙️ Tool result: `{msg.name}`", expanded=False):
+        with st.expander(f"⚙️ Resultado de herramienta: `{msg.name}`", expanded=False):
             st.code(str(msg.content)[:1000])
 
-# ── HITL panel (inline) ────────────────────────────────────────────────────
+# ── aviso de HITL pendiente ───────────────────────────────────────────────────
 if st.session_state.get("pending_interrupt"):
     iv = st.session_state.pending_interrupt
     payload = iv.get("value", iv) if isinstance(iv, dict) else getattr(iv, "value", iv)
-    art_name = payload.get("artifact_name", "artifact")
-
+    art_name = payload.get("artifact_name", "artefacto")
     st.divider()
-    st.warning(f"⏸ **Awaiting your approval** for `{art_name}`")
-    st.markdown("Go to the **Pipeline** page to review and approve/reject.")
+    st.warning(f"⏸ **Esperando tu aprobación** de `{art_name}`. Ve a la página **Pipeline** para revisar.")
 
-# ── chat input ────────────────────────────────────────────────────────────────
+# ── input de chat ─────────────────────────────────────────────────────────────
 st.divider()
-user_input = st.chat_input("Message to Supervisor (e.g., 'Use PostgreSQL not MongoDB')")
+user_input = st.chat_input("Mensaje al Supervisor (ej: 'Usa PostgreSQL en vez de MongoDB')")
 
 if user_input:
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
-    with st.spinner("Supervisor processing…"):
+    with st.spinner("El Supervisor está procesando…"):
+        try:
+            from dashboard.frontend.app import _get_pending_interrupt
+        except ImportError:
+            def _get_pending_interrupt(pipeline, config):
+                try:
+                    snapshot = pipeline.get_state(config)
+                    if snapshot and snapshot.tasks:
+                        for task in snapshot.tasks:
+                            if hasattr(task, "interrupts") and task.interrupts:
+                                return task.interrupts[0]
+                except Exception:
+                    pass
+                return None
+
         try:
             result = st.session_state.pipeline.invoke(
                 {"messages": [HumanMessage(content=user_input)]},
                 config=config,
             )
             st.session_state.graph_state = result
-            interrupts = result.get("__interrupt__", [])
-            st.session_state.pending_interrupt = interrupts[0] if interrupts else None
+            st.session_state.pending_interrupt = _get_pending_interrupt(
+                st.session_state.pipeline, config
+            )
         except Exception as e:
             st.error(f"Error: {e}")
     st.rerun()

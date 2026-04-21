@@ -52,6 +52,44 @@ def list_artifacts(run_id: str = "default") -> str:
     return "\n".join(files)
 
 
+def ensure_artifact_saved(
+    role: str,
+    artifact_name: str,
+    run_id: str,
+    messages: list,
+) -> None:
+    """
+    Si el artefacto esperado no existe en disco (el LLM no llamó save_artifact),
+    lo guarda automáticamente usando el contenido del último mensaje de IA sustancial.
+    Evita que el HITL muestre un artefacto vacío.
+    """
+    path = _artifacts_path(run_id) / artifact_name
+    if path.exists():
+        return  # ya fue guardado correctamente
+
+    # Busca el último AIMessage con contenido sustancial
+    from langchain_core.messages import AIMessage
+    content = ""
+    for msg in reversed(messages):
+        if isinstance(msg, AIMessage) and msg.content and len(str(msg.content)) > 200:
+            content = str(msg.content)
+            break
+
+    if content:
+        path.write_text(content, encoding="utf-8")
+        meta = {
+            "name": artifact_name,
+            "agent": role,
+            "saved_at": datetime.now(timezone.utc).isoformat(),
+            "size_chars": len(content),
+            "path": str(path),
+            "auto_saved": True,
+        }
+        (path.parent / f"{artifact_name}.meta.json").write_text(
+            json.dumps(meta, indent=2), encoding="utf-8"
+        )
+
+
 def load_artifacts_from_fs(run_id: str) -> dict:
     """Load all artifacts from filesystem into a dict for state."""
     path = _artifacts_path(run_id)

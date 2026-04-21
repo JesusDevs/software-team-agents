@@ -5,15 +5,25 @@ from state.schema import ProjectState, PHASE_ORDER, PHASE_ARTIFACTS
 
 def hitl_gate(state: ProjectState) -> Command:
     """HITL node: interrupts the graph and waits for human approval of the current artifact."""
+    from config.settings import settings
+
     phase = state.get("current_phase", "")
     artifact_name = PHASE_ARTIFACTS.get(phase, "")
     artifact = state.get("artifacts", {}).get(artifact_name, {})
+    content = artifact.get("content", "")
+
+    # Fallback: leer del disco si el estado no tiene el contenido
+    if not content and artifact_name:
+        run_id = state.get("run_id", "default")
+        disk_path = settings.artifacts_dir / run_id / artifact_name
+        if disk_path.exists():
+            content = disk_path.read_text(encoding="utf-8")
 
     decision = interrupt({
         "phase": phase,
         "artifact_name": artifact_name,
-        "content": artifact.get("content", ""),
-        "message": f"Review the {artifact_name} from the {phase.upper()} agent.",
+        "content": content,
+        "message": f"Revisa el {artifact_name} del agente {phase.upper()}.",
     })
 
     approved: bool = decision.get("approved", False)

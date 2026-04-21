@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from llm.models import get_model_for_agent
-from tools.shared.artifacts import save_artifact, read_artifact, list_artifacts
+from tools.shared.artifacts import save_artifact, read_artifact, list_artifacts, ensure_artifact_saved
 from tools.shared.search import web_search
 from tools.shared.knowledge import make_search_knowledge_tool
 from tools.hitl.question import ask_question
@@ -58,6 +58,7 @@ def po_agent_node(state: ProjectState, config: RunnableConfig) -> dict:
             messages.append(tool_msg)
             new_messages.append(tool_msg)
 
+    ensure_artifact_saved(ROLE, "01_PRD.md", run_id, messages)
     artifacts = load_artifacts_from_fs(run_id)
     token_usage = dict(state.get("token_usage", {}))
     token_usage[ROLE] = {

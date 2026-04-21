@@ -66,14 +66,24 @@ def _get_pending_interrupt(pipeline, config):
         # Enfoque 2: si hitl_gate es el próximo nodo, reconstruimos el payload
         next_nodes = snapshot.next or []
         if "hitl_gate" in next_nodes:
-            vals  = snapshot.values
-            phase = vals.get("current_phase", "")
+            from config.settings import settings
+            vals     = snapshot.values
+            phase    = vals.get("current_phase", "")
+            run_id   = vals.get("run_id", "default")
             art_name = PHASE_ARTIFACTS.get(phase, "")
             artifact = vals.get("artifacts", {}).get(art_name, {})
+            content  = artifact.get("content", "")
+
+            # Fallback: leer directamente del disco
+            if not content and art_name:
+                disk_path = settings.artifacts_dir / run_id / art_name
+                if disk_path.exists():
+                    content = disk_path.read_text(encoding="utf-8")
+
             return {"value": {
                 "phase":         phase,
                 "artifact_name": art_name,
-                "content":       artifact.get("content", ""),
+                "content":       content,
                 "message":       f"Revisa el artefacto {art_name} del agente {phase.upper()}.",
             }}
     except Exception:

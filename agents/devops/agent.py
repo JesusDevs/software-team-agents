@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from langchain_core.messages import SystemMessage, HumanMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from llm.models import get_model_for_agent
-from tools.shared.artifacts import save_artifact, read_artifact, list_artifacts, load_artifacts_from_fs
+from tools.shared.artifacts import save_artifact, read_artifact, list_artifacts, load_artifacts_from_fs, ensure_artifact_saved
 from tools.shared.search import web_search
 from tools.shared.knowledge import make_search_knowledge_tool
 from tools.hitl.question import ask_question
@@ -55,6 +55,7 @@ def devops_agent_node(state: ProjectState, config: RunnableConfig) -> dict:
             messages.append(tool_msg)
             new_messages.append(tool_msg)
 
+    ensure_artifact_saved(ROLE, "05_DEVOPS_PLAN.md", run_id, messages)
     artifacts = load_artifacts_from_fs(run_id)
     token_usage = dict(state.get("token_usage", {}))
     prev = token_usage.get(ROLE, {"input_tokens": 0, "output_tokens": 0, "total_tokens": 0})

@@ -1,10 +1,11 @@
 """
-Test de pipeline completo (smoke test).
-Ejecuta el pipeline hasta el primer interrupt (HITL después de PO).
+Tests de pipeline completo.
 
-Ejecutar:
-    python -m pytest tests/test_pipeline.py -v -s
+Smoke (solo PO → HITL, ~30s):
     python -m pytest tests/test_pipeline.py::test_pipeline_po_to_hitl -v -s
+
+Pipeline completo PO→UX→Architect→Dev→DevOps con HITL auto-aprobado (~10 min):
+    python -m pytest tests/test_pipeline.py::test_pipeline_full_auto_approve -v -s
 """
 import pytest
 import sys
@@ -126,6 +127,104 @@ def test_pipeline_po_to_hitl(run_id):
     print(f"   Artefactos: {list(artifacts.keys())}")
     print(f"   Tokens PO: {token_usage.get('po', {}).get('total_tokens', 0)}")
     print(f"   PRD ({len(content)} chars):\n   {content[:200]}...")
+
+
+def test_pipeline_full_auto_approve():
+    """
+    Corre el pipeline completo (PO→UX→Architect→Dev→DevOps) aprobando
+    automáticamente cada HITL. Al terminar valida que existan los 5 MDs.
+
+    Tiempo estimado: ~8-12 minutos (5 llamadas a Gemini 2.5 Pro).
+    """
+    from graph.pipeline import create_pipeline
+    from langchain_core.messages import HumanMessage
+    from langgraph.types import Command
+
+    PHASE_FILES = [
+        "01_PRD.md",
+        "02_UX_SPEC.md",
+        "03_SYSTEM_DESIGN.md",
+        "04_IMPLEMENTATION_SPEC.md",
+        "05_DEVOPS_PLAN.md",
+    ]
+    PHASE_NAMES = ["PO", "UX", "Arquitecto", "Dev", "DevOps"]
+
+    run_id = f"full_{uuid.uuid4().hex[:8]}"
+    thread_id = f"full_{uuid.uuid4().hex}"
+    config = {"configurable": {"thread_id": thread_id}}
+
+    pipeline = create_pipeline()
+    artifacts_dir = ROOT / "artifacts" / run_id
+
+    initial_state = {
+        "messages": [HumanMessage(content=BRIEF)],
+        "project_brief": BRIEF,
+        "run_id": run_id,
+        "current_phase": "po",
+        "next_agent": "po",
+        "task_instructions": f"Crea el PRD completo en español para: {BRIEF}. Guárdalo como 01_PRD.md.",
+        "hitl_feedback": "",
+        "artifacts": {},
+        "token_usage": {},
+        "handoff_log": [],
+        "error": "",
+    }
+
+    print(f"\n🚀 Iniciando pipeline completo — run_id: {run_id}")
+
+    # Primera invocación
+    result = pipeline.invoke(initial_state, config=config)
+
+    # Loop: aprueba automáticamente cada HITL hasta que el pipeline termina
+    max_rounds = 10  # seguro contra loops infinitos
+    for round_num in range(max_rounds):
+        snapshot = pipeline.get_state(config)
+        next_nodes = list(snapshot.next or [])
+
+        if not next_nodes or next_nodes == ["__end__"]:
+            print(f"   ✅ Pipeline completado en ronda {round_num}")
+            break
+
+        if "hitl_gate" in next_nodes:
+            phase = result.get("current_phase", "?")
+            phase_idx = ["po","ux","architect","dev","devops"].index(phase) if phase in ["po","ux","architect","dev","devops"] else -1
+            phase_label = PHASE_NAMES[phase_idx] if phase_idx >= 0 else phase
+            files_now = [f.name for f in artifacts_dir.glob("*.md")] if artifacts_dir.exists() else []
+            print(f"   ⏸  HITL ronda {round_num+1} — fase: {phase_label} — archivos: {files_now}")
+            print(f"   ✅ Auto-aprobando...")
+            result = pipeline.invoke(Command(resume={"approved": True}), config=config)
+        else:
+            # Nodo en ejecución — no debería ocurrir con invoke() síncrono
+            print(f"   ⏳ Nodos pendientes: {next_nodes}")
+            break
+    else:
+        pytest.fail(f"Pipeline no terminó después de {max_rounds} rondas")
+
+    # Validaciones finales
+    print(f"\n📦 Validando artefactos en {artifacts_dir}")
+    missing = []
+    for fname, label in zip(PHASE_FILES, PHASE_NAMES):
+        path = artifacts_dir / fname
+        if path.exists():
+            size = len(path.read_text(encoding="utf-8"))
+            print(f"   ✅ {label}: {fname} ({size} chars)")
+        else:
+            print(f"   ❌ {label}: {fname} — NO ENCONTRADO")
+            missing.append(fname)
+
+    # Token summary
+    token_usage = result.get("token_usage", {})
+    total = sum(v.get("total_tokens", 0) for v in token_usage.values())
+    print(f"\n📊 Tokens totales: {total:,}")
+    for role, usage in sorted(token_usage.items()):
+        print(f"   {role}: {usage.get('total_tokens', 0):,}")
+
+    # Limpieza
+    import shutil as _shutil
+    if artifacts_dir.exists():
+        _shutil.rmtree(artifacts_dir)
+
+    assert not missing, f"Artefactos faltantes: {missing}"
 
 
 def test_pipeline_state_persists_after_restart(run_id):

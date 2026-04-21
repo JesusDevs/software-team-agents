@@ -1,5 +1,4 @@
 from langchain_core.tools import tool
-from config.settings import settings
 
 
 def make_search_knowledge_tool(agent_role: str):
@@ -10,20 +9,18 @@ def make_search_knowledge_tool(agent_role: str):
         """Search your personal knowledge base for templates, guidelines, and examples.
         Call this BEFORE generating any artifact to find relevant templates.
         """
-        if not settings.has_openai_key():
-            return "Knowledge base unavailable (OPENAI_API_KEY not set)."
         try:
             from rag.retriever import get_retriever
             retriever = get_retriever(agent_role)
             docs = retriever.invoke(query)
             if not docs:
-                return "No relevant documents found in knowledge base."
+                return f"Base de conocimiento vacía para {agent_role}. Puedes agregar archivos .md en agents/{agent_role}/knowledge/."
             parts = []
             for doc in docs:
                 source = doc.metadata.get("source", "unknown")
                 parts.append(f"--- [{source}] ---\n{doc.page_content}")
             return "\n\n".join(parts)
-        except Exception as e:
-            return f"Knowledge base error: {e}"
+        except Exception:
+            return f"Base de conocimiento sin documentos para {agent_role}. Usa tu conocimiento interno."
 
     return search_knowledge

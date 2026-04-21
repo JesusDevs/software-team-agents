@@ -348,6 +348,5 @@ else:
 
     elif state and state.get("current_phase") == "done":
         st.success("🎉 ¡Pipeline completo! Los 5 entregables fueron aprobados.")
-        st.balloons()
     else:
         st.info("Pipeline en ejecución. Verifica la página de **Chat** para interactuar con el Supervisor.")

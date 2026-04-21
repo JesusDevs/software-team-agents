@@ -28,11 +28,8 @@ def _file_hash(path: Path) -> str:
 def index_agent_knowledge(agent_role: str, force: bool = False) -> int:
     """Index all .md files in agents/{role}/knowledge/ into the agent's Chroma collection.
     Returns the number of new chunks indexed.
+    Works with any embeddings provider (OpenAI or local sentence-transformers).
     """
-    from config.settings import settings
-    if not settings.has_openai_key():
-        return 0
-
     from rag.store import get_agent_vectorstore
     from langchain_text_splitters import RecursiveCharacterTextSplitter
 

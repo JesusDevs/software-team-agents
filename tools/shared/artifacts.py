@@ -67,13 +67,28 @@ def ensure_artifact_saved(
     if path.exists():
         return  # ya fue guardado correctamente
 
-    # Busca el último AIMessage con contenido sustancial
+    # Extrae texto plano del content (Gemini devuelve lista de dicts)
+    def _extract_text(raw) -> str:
+        if isinstance(raw, str):
+            return raw
+        if isinstance(raw, list):
+            parts = []
+            for block in raw:
+                if isinstance(block, dict) and block.get("type") == "text":
+                    parts.append(block.get("text", ""))
+                elif isinstance(block, str):
+                    parts.append(block)
+            return "\n".join(parts)
+        return str(raw)
+
     from langchain_core.messages import AIMessage
     content = ""
     for msg in reversed(messages):
-        if isinstance(msg, AIMessage) and msg.content and len(str(msg.content)) > 200:
-            content = str(msg.content)
-            break
+        if isinstance(msg, AIMessage) and msg.content:
+            text = _extract_text(msg.content)
+            if len(text) > 200:
+                content = text
+                break
 
     if content:
         path.write_text(content, encoding="utf-8")

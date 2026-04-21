@@ -79,19 +79,32 @@ user_input = st.chat_input("Mensaje al Supervisor (ej: 'Usa PostgreSQL en vez de
 if user_input:
     config = {"configurable": {"thread_id": st.session_state.thread_id}}
     with st.spinner("El Supervisor está procesando…"):
-        try:
-            from dashboard.frontend.app import _get_pending_interrupt
-        except ImportError:
-            def _get_pending_interrupt(pipeline, config):
-                try:
-                    snapshot = pipeline.get_state(config)
-                    if snapshot and snapshot.tasks:
-                        for task in snapshot.tasks:
-                            if hasattr(task, "interrupts") and task.interrupts:
-                                return task.interrupts[0]
-                except Exception:
-                    pass
-                return None
+        def _get_pending_interrupt(pipeline, config):
+            try:
+                from state.schema import PHASE_ARTIFACTS
+                snapshot = pipeline.get_state(config)
+                if not snapshot or not snapshot.values:
+                    return None
+                if snapshot.tasks:
+                    for task in snapshot.tasks:
+                        if hasattr(task, "interrupts") and task.interrupts:
+                            iv = task.interrupts[0]
+                            val = iv.value if hasattr(iv, "value") else iv
+                            return {"value": val}
+                next_nodes = snapshot.next or []
+                if "hitl_gate" in next_nodes:
+                    vals = snapshot.values
+                    phase = vals.get("current_phase", "")
+                    art_name = PHASE_ARTIFACTS.get(phase, "")
+                    artifact = vals.get("artifacts", {}).get(art_name, {})
+                    return {"value": {
+                        "phase": phase,
+                        "artifact_name": art_name,
+                        "content": artifact.get("content", ""),
+                    }}
+            except Exception:
+                pass
+            return None
 
         try:
             result = st.session_state.pipeline.invoke(

@@ -42,13 +42,40 @@ def _delete_session(thread_id: str) -> None:
 
 # ── detección de interrupts (LangGraph 1.1.x) ─────────────────────────────────
 def _get_pending_interrupt(pipeline, config):
-    """Detecta si el grafo está pausado en un nodo interrupt."""
+    """
+    Detecta si el grafo está pausado en hitl_gate.
+    LangGraph 1.1.x puede no poblar tasks.interrupts, así que usamos
+    snapshot.next para detectar la pausa y reconstruimos el payload
+    directamente desde el estado guardado.
+    """
     try:
+        from state.schema import PHASE_ARTIFACTS
         snapshot = pipeline.get_state(config)
-        if snapshot and snapshot.tasks:
+        if not snapshot or not snapshot.values:
+            return None
+
+        # Enfoque 1: tasks.interrupts (LangGraph >= 0.2 con interrupt())
+        if snapshot.tasks:
             for task in snapshot.tasks:
                 if hasattr(task, "interrupts") and task.interrupts:
-                    return task.interrupts[0]
+                    iv = task.interrupts[0]
+                    # Puede ser objeto Interrupt o dict
+                    val = iv.value if hasattr(iv, "value") else iv
+                    return {"value": val}
+
+        # Enfoque 2: si hitl_gate es el próximo nodo, reconstruimos el payload
+        next_nodes = snapshot.next or []
+        if "hitl_gate" in next_nodes:
+            vals  = snapshot.values
+            phase = vals.get("current_phase", "")
+            art_name = PHASE_ARTIFACTS.get(phase, "")
+            artifact = vals.get("artifacts", {}).get(art_name, {})
+            return {"value": {
+                "phase":         phase,
+                "artifact_name": art_name,
+                "content":       artifact.get("content", ""),
+                "message":       f"Revisa el artefacto {art_name} del agente {phase.upper()}.",
+            }}
     except Exception:
         pass
     return None
@@ -85,12 +112,12 @@ _init_session()
 def _restore_from_checkpoint(thread_id: str) -> None:
     config = {"configurable": {"thread_id": thread_id}}
     try:
-        snapshot = st.session_state.pipeline.get_state(config)
+        pipeline = st.session_state.pipeline
+        snapshot = pipeline.get_state(config)
         if snapshot and snapshot.values:
             st.session_state.graph_state = snapshot.values
             st.session_state.started = True
-            interrupt = _get_pending_interrupt(st.session_state.pipeline, config)
-            st.session_state.pending_interrupt = interrupt
+            st.session_state.pending_interrupt = _get_pending_interrupt(pipeline, config)
     except Exception as e:
         st.warning(f"No se pudo restaurar el estado: {e}")
 

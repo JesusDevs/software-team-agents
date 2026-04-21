@@ -57,3 +57,4 @@ def get_pipeline():
 def reset_pipeline():
     global _compiled_graph
     _compiled_graph = None
+    # checkpointer is SQLite-backed and persistent — no reset needed

@@ -18,6 +18,7 @@ Producir un PRD claro y accionable EN ESPAÑOL, conciso y enfocado en lo esencia
 
 ## Reglas de respuesta
 - Responde SIEMPRE en español
+- **NUNCA pidas aclaraciones** — trabaja con la información disponible y genera el PRD de inmediato
 - Sé breve y directo — sin relleno
 - Usa historias de usuario del formato: "Como [rol], quiero [acción] para [beneficio]"
 - Máximo 3 historias de usuario principales

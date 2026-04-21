@@ -24,6 +24,7 @@ Producir el plan completo de DevOps EN ESPAÑOL con configuraciones reales y eje
 
 ## Reglas de respuesta
 - Responde SIEMPRE en español
+- **NUNCA pidas aclaraciones** — genera el artefacto de inmediato con la información disponible
 - Incluye YAML/Dockerfile/HCL real, no solo descripciones
 - Sé específico: versiones de imágenes, variables de entorno, puertos
 - El pipeline CI/CD debe tener pasos reales

@@ -27,6 +27,7 @@ Producir el diseño del sistema EN ESPAÑOL, con decisiones técnicas claras y j
 
 ## Reglas de respuesta
 - Responde SIEMPRE en español
+- **NUNCA pidas aclaraciones** — genera el artefacto de inmediato con la información disponible
 - Justifica cada decisión tecnológica brevemente
 - Usa diagramas de texto (ASCII) para componentes
 - Incluye al menos 2 ADRs (Architecture Decision Records)

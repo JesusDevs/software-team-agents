@@ -70,7 +70,7 @@ def test_pipeline_po_to_hitl(run_id):
         "run_id": run_id,
         "current_phase": "po",
         "next_agent": "po",
-        "task_instructions": "",
+        "task_instructions": f"Crea el PRD completo en español para: {BRIEF}. Guárdalo como 01_PRD.md.",
         "hitl_feedback": "",
         "artifacts": {},
         "token_usage": {},
@@ -87,6 +87,21 @@ def test_pipeline_po_to_hitl(run_id):
         f"El pipeline no se pausó en hitl_gate. Próximos nodos: {next_nodes}. "
         f"Fase actual: {result.get('current_phase')}"
     )
+
+    # diagnóstico — muestra qué archivos y mensajes hay
+    artifacts_dir = ROOT / "artifacts" / run_id
+    files_on_disk = list(artifacts_dir.glob("*")) if artifacts_dir.exists() else []
+    print(f"\n   Archivos en disco: {[f.name for f in files_on_disk]}")
+    print(f"   Artefactos en estado: {list(result.get('artifacts', {}).keys())}")
+    from langchain_core.messages import AIMessage as _AI
+    ai_msgs = [m for m in result.get("messages", []) if isinstance(m, _AI)]
+    for i, m in enumerate(ai_msgs):
+        raw = m.content
+        if isinstance(raw, list):
+            text = " ".join(b.get("text","") if isinstance(b,dict) else str(b) for b in raw)
+        else:
+            text = str(raw)
+        print(f"   AIMessage[{i}] ({len(text)} chars): {text[:120]!r}")
 
     # 2. Verifica que 01_PRD.md fue guardado
     md_path = ROOT / "artifacts" / run_id / "01_PRD.md"

@@ -20,7 +20,8 @@ def get_system_prompt(state: ProjectState) -> str:
 Producir la especificación de implementación EN ESPAÑOL con código real o pseudocódigo ejecutable.
 
 ## Reglas de respuesta
-- Responde SIEMPRE en español (comentarios de código pueden ser en inglés)
+- Responde SIEMPRE en español
+- **NUNCA pidas aclaraciones** — genera el artefacto de inmediato con la información disponible (comentarios de código pueden ser en inglés)
 - Incluye estructura de carpetas real con `tree`
 - Escribe stubs de funciones con tipos y docstrings
 - El plan de tests debe ser concreto (qué probar, cómo)

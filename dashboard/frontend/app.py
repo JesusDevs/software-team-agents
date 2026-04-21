@@ -226,13 +226,11 @@ if not st.session_state.started:
         if not brief.strip():
             st.warning("Por favor ingresa un brief del proyecto.")
         else:
-            st.session_state.run_id = run_id or "run_001"
-            st.session_state.started = True
-
+            _run_id = run_id or "run_001"
             initial_state = {
                 "messages": [HumanMessage(content=brief)],
                 "project_brief": brief,
-                "run_id": run_id or "run_001",
+                "run_id": _run_id,
                 "current_phase": "po",
                 "next_agent": "po",
                 "task_instructions": "",
@@ -242,24 +240,26 @@ if not st.session_state.started:
                 "handoff_log": [],
                 "error": "",
             }
-
             config = {"configurable": {"thread_id": st.session_state.thread_id}}
-            with st.spinner("Ejecutando agente PO…"):
+            with st.spinner("⏳ Ejecutando agente PO… (puede tardar 1-2 minutos)"):
                 try:
                     result = st.session_state.pipeline.invoke(initial_state, config=config)
+                    st.session_state.run_id     = _run_id
+                    st.session_state.started    = True
                     st.session_state.graph_state = result
                     st.session_state.pending_interrupt = _get_pending_interrupt(
                         st.session_state.pipeline, config
                     )
                     _save_session(
-                        st.session_state.thread_id,
-                        st.session_state.run_id,
-                        brief,
+                        st.session_state.thread_id, _run_id, brief,
                         result.get("current_phase", "po"),
                     )
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Error en el pipeline: {e}")
-            st.rerun()
+                    import traceback
+                    st.error(f"❌ Error en el pipeline: {e}")
+                    st.code(traceback.format_exc(), language="text")
+                    st.stop()
 else:
     # ── panel HITL ────────────────────────────────────────────────────────────
     if st.session_state.pending_interrupt:
@@ -287,8 +287,9 @@ else:
 
         if col1.button("✅ Aprobar", type="primary", use_container_width=True):
             from langgraph.types import Command
+            _prev_interrupt = st.session_state.pending_interrupt
             st.session_state.pending_interrupt = None
-            with st.spinner("Reanudando pipeline…"):
+            with st.spinner("⏳ Reanudando pipeline…"):
                 try:
                     result = st.session_state.pipeline.invoke(
                         Command(resume={"approved": True}), config=config
@@ -298,20 +299,23 @@ else:
                         st.session_state.pipeline, config
                     )
                     _save_session(
-                        st.session_state.thread_id,
-                        st.session_state.run_id,
+                        st.session_state.thread_id, st.session_state.run_id,
                         state.get("project_brief", "") if state else "",
                         result.get("current_phase", phase),
                     )
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Error: {e}")
-            st.rerun()
+                    import traceback
+                    st.session_state.pending_interrupt = _prev_interrupt
+                    st.error(f"❌ Error al reanudar: {e}")
+                    st.code(traceback.format_exc(), language="text")
 
         if col2.button("❌ Rechazar y revisar", use_container_width=True):
             from langgraph.types import Command
             feedback = st.session_state.get("hitl_feedback_input", "")
+            _prev_interrupt = st.session_state.pending_interrupt
             st.session_state.pending_interrupt = None
-            with st.spinner("Enviando feedback…"):
+            with st.spinner("⏳ Enviando feedback y revisando…"):
                 try:
                     result = st.session_state.pipeline.invoke(
                         Command(resume={"approved": False, "feedback": feedback}), config=config
@@ -321,14 +325,16 @@ else:
                         st.session_state.pipeline, config
                     )
                     _save_session(
-                        st.session_state.thread_id,
-                        st.session_state.run_id,
+                        st.session_state.thread_id, st.session_state.run_id,
                         state.get("project_brief", "") if state else "",
                         result.get("current_phase", phase),
                     )
+                    st.rerun()
                 except Exception as e:
-                    st.error(f"Error: {e}")
-            st.rerun()
+                    import traceback
+                    st.session_state.pending_interrupt = _prev_interrupt
+                    st.error(f"❌ Error al enviar feedback: {e}")
+                    st.code(traceback.format_exc(), language="text")
 
     elif state and state.get("current_phase") == "done":
         st.success("🎉 ¡Pipeline completo! Los 5 entregables fueron aprobados.")

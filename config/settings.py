@@ -11,6 +11,8 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 class Settings(BaseSettings):
     openai_api_key: str = Field(default="", alias="OPENAI_API_KEY")
     openrouter_api_key: str = Field(default="", alias="OPENROUTER_API_KEY")
+    kimi_api_key: str = Field(default="", alias="KIMI_API_KEY")
+    gemini_api_key: str = Field(default="", alias="GEMINI_API_KEY")
     langchain_api_key: str = Field(default="", alias="LANGCHAIN_API_KEY")
     langchain_tracing_v2: str = Field(default="false", alias="LANGCHAIN_TRACING_V2")
     langchain_project: str = Field(default="software-team-agents", alias="LANGCHAIN_PROJECT")
@@ -31,12 +33,18 @@ class Settings(BaseSettings):
     def has_openrouter_key(self) -> bool:
         return bool(self.openrouter_api_key and self.openrouter_api_key.startswith("sk-or-"))
 
+    def has_kimi_key(self) -> bool:
+        return bool(self.kimi_api_key and self.kimi_api_key.startswith("sk-"))
+
+    def has_gemini_key(self) -> bool:
+        return bool(self.gemini_api_key and self.gemini_api_key.startswith("AIza"))
+
     def active_provider(self) -> str:
-        """Returns 'openai' or 'openrouter' based on available keys."""
-        if self.has_openai_key():
-            return "openai"
-        if self.has_openrouter_key():
-            return "openrouter"
+        """Priority: openai → gemini → kimi → openrouter → none"""
+        if self.has_openai_key():    return "openai"
+        if self.has_gemini_key():    return "gemini"
+        if self.has_kimi_key():      return "kimi"
+        if self.has_openrouter_key(): return "openrouter"
         return "none"
 
 

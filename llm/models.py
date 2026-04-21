@@ -21,11 +21,7 @@ def _cfg() -> dict:
 
 
 def _provider() -> str:
-    if settings.has_openai_key():
-        return "openai"
-    if settings.has_openrouter_key():
-        return "openrouter"
-    return "none"
+    return settings.active_provider()
 
 
 def _model_for_tier(tier: str) -> str:
@@ -36,36 +32,47 @@ def _model_for_tier(tier: str) -> str:
 
 
 @lru_cache(maxsize=None)
-def get_model_for_agent(role: str) -> ChatOpenAI:
-    """Return a ChatOpenAI instance configured for the given agent role.
-    Reads tier, temperature, and max_tokens from config/models.yaml.
-    Provider is auto-selected from .env keys.
+def get_model_for_agent(role: str):
+    """Return an LLM instance for the given agent role.
+    Provider priority: openai → gemini → kimi → openrouter.
+    All config lives in config/models.yaml — no code changes needed.
     """
-    agent_cfg = _cfg()["agents"].get(role, {})
+    agent_cfg   = _cfg()["agents"].get(role, {})
     tier        = agent_cfg.get("tier", "fast")
     temperature = agent_cfg.get("temperature", 0.3)
     max_tokens  = agent_cfg.get("max_tokens", 2000)
     model       = _model_for_tier(tier)
     provider    = _provider()
 
-    if provider == "openrouter":
-        provider_cfg = _cfg()["providers"]["openrouter"]
-        return ChatOpenAI(
+    # Gemini uses its own LangChain wrapper
+    if provider == "gemini":
+        from langchain_google_genai import ChatGoogleGenerativeAI
+        return ChatGoogleGenerativeAI(
             model=model,
             temperature=temperature,
-            max_tokens=max_tokens,
-            api_key=settings.openrouter_api_key,
-            base_url=provider_cfg["base_url"],
-            streaming=True,
-            default_headers=provider_cfg.get("headers", {}),
+            max_output_tokens=max_tokens,
+            google_api_key=settings.gemini_api_key,
         )
+
+    # All other providers use OpenAI-compatible API
+    provider_cfg = _cfg()["providers"].get(provider, {})
+    base_url = provider_cfg.get("base_url")
+    headers  = provider_cfg.get("headers", {})
+
+    key_map = {
+        "openai":     settings.openai_api_key,
+        "kimi":       settings.kimi_api_key,
+        "openrouter": settings.openrouter_api_key,
+    }
 
     return ChatOpenAI(
         model=model,
         temperature=temperature,
         max_tokens=max_tokens,
-        api_key=settings.openai_api_key,
+        api_key=key_map.get(provider, ""),
+        base_url=base_url if provider != "openai" else None,
         streaming=True,
+        default_headers=headers if headers else None,
     )
 
 

@@ -18,6 +18,14 @@ providers:
     base_url: https://api.openai.com/v1
     env_key: OPENAI_API_KEY
 
+  gemini:
+    env_key: GEMINI_API_KEY
+    # uses langchain-google-genai (no base_url needed)
+
+  kimi:
+    base_url: https://api.moonshot.cn/v1
+    env_key: KIMI_API_KEY
+
   openrouter:
     base_url: https://openrouter.ai/api/v1
     env_key: OPENROUTER_API_KEY
@@ -29,16 +37,26 @@ providers:
 # Each provider lists: strong (complex reasoning) and fast (simple/routing)
 llm_models:
   openai:
-    strong: gpt-4o             # PO, UX, Architect, Dev
-    fast:   gpt-4o-mini        # Supervisor, DevOps
+    strong: gpt-4o
+    fast:   gpt-4o-mini
+
+  gemini:
+    strong: gemini-2.5-pro                 # best quality
+    fast:   gemini-2.5-flash               # fast, high free quota
+    # Alternatives:
+    # strong: gemini-1.5-pro
+    # fast:   gemini-1.5-flash
+
+  kimi:
+    strong: kimi-k2
+    fast:   moonshot-v1-8k
 
   openrouter:
-    strong: meta-llama/llama-3.3-70b-instruct:free   # PO, UX, Architect, Dev
-    fast:   meta-llama/llama-3.2-3b-instruct:free    # Supervisor, DevOps
+    strong: meta-llama/llama-3.3-70b-instruct:free
+    fast:   meta-llama/llama-3.2-3b-instruct:free
     # Alternatives (uncomment to switch):
-    # strong: deepseek/deepseek-r1:free
-    # strong: google/gemma-3-27b-it:free
-    # strong: mistralai/mistral-7b-instruct:free
+    # strong: openai/gpt-oss-120b:free
+    # strong: nvidia/nemotron-3-super-120b-a12b:free
 
 # ── Embeddings ───────────────────────────────────────────────────────────────
 # Priority: openai → local (sentence-transformers, no key needed)

@@ -14,3 +14,4 @@ duckduckgo-search>=6.0.0
 tiktoken>=0.7.0
 sentence-transformers>=3.0.0
 langchain-huggingface>=0.1.0
+langchain-google-genai>=2.0.0
